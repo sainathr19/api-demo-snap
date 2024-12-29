@@ -1,0 +1,42 @@
+{
+  "version": "0.1.0",
+  "description": "An Demo snap for swapping assets using Garden API.",
+  "proposedName": "Garden Swap",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MetaMask/template-snap-monorepo.git"
+  },
+  "source": {
+    "shasum": "MzUNJ4r6a7vkQeIo2cH/Uve3LZ+NnI5hsq4ke5DB+28=",
+    "location": {
+      "npm": {
+        "filePath": "dist/bundle.js",
+        "packageName": "snap",
+        "registry": "https://registry.npmjs.org/"
+      }
+    }
+  },
+  "initialPermissions": {
+    "snap_dialog": {},
+    "endowment:rpc": {
+      "dapps": true,
+      "snaps": false
+    },
+    "endowment:network-access": {},
+    "endowment:page-home": {},
+    "endowment:ethereum-provider": {},
+    "snap_manageState": {},
+    "endowment:cronjob": {
+      "jobs": [
+        {
+          "expression": "*/10 * * * * *",
+          "request": {
+            "method": "checkOrderStatus"
+          }
+        }
+      ]
+    }
+  },
+  "platformVersion": "6.14.0",
+  "manifestVersion": "0.1"
+}
