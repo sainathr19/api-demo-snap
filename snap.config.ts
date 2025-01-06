@@ -5,11 +5,13 @@ const config: SnapConfig = {
   bundler: 'webpack',
   input: resolve(__dirname, 'src/index.tsx'),
   server: {
-    port: 8080,
+    port: 5000,
   },
-  polyfills: {
-    buffer: true,
-  },
+  polyfills: true,
+  experimental : {
+    wasm : true
+  }
+
 };
 
 export default config;

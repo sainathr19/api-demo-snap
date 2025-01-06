@@ -4,12 +4,17 @@ import {
   CreateOrderRes,
   FetchOrderResponse,
   FetchQuoteResponse,
+  MatchedOrder,
   OrderCountResponse,
   RedeemRequest,
   RedeemResponse,
 } from '../lib/types';
 import { decimalToBase } from '../lib/utils';
 import { API } from '../lib/api';
+import { BitcoinWallet } from '../wallets/bitcoin';
+import { xOnlyPubkey } from '../wallets/utils';
+import { EVMWallet } from '../wallets/evm';
+import { FetchOrdersResponse } from '../wallets/types';
 
 const ASSETS = {
   fromChain: 'bitcoin_testnet',
@@ -18,30 +23,74 @@ const ASSETS = {
   toAsset: '0x3c6a17b8cd92976d1d91e491c93c98cd81998265',
 };
 
-const userAddress = '0x....4Ec7';
-const initiatorSourceAddress = 'bfe...ade';
-const authToken = 'eyJ0eXAi..-6W_un98';
+// const userAddress = '0x....4Ec7';
+// const initiatorSourceAddress = 'bfe...ade';
+// const authToken = 'eyJ0eXAi..-6W_un98';
 
+
+const authToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhZGRyZXNzIjoiMHg3QzI2MTYyYzVGMEM1OTg1MTA3NGVkNmJCZjI2ODc1NEY2YkU0RWM3IiwiZXhwIjoxNzM2MjQ1ODAwfQ.X_04nAf-Uy5SlNvZ-UWlp3tzjuyD-5WavIg5KCUjJmQ";
+/**
+ * Fetches a quote for a given amount of an asset.
+ *
+ * @param inAmount - The amount of the asset to fetch a quote for. Can be a number or a string.
+ * @returns A promise that resolves to the quote result.
+ * @throws Will throw an error if there is an error in the response data.
+ */
 export async function fetchQuote(inAmount: number | string) {
   const orderPair = `${ASSETS.fromChain}:${ASSETS.fromAsset}::${ASSETS.toChain}:${ASSETS.toAsset}`;
-  const response = await fetch(
-    `${API().quote}?order_pair=${orderPair}&amount=${decimalToBase(
-      inAmount,
-      8,
-    )}&exact_out=false`,
-    {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    },
-  );
-  const data: FetchQuoteResponse = await response.json();
+  try {
+    const response = await fetch(
+      `${API().quote}/quote?order_pair=${orderPair}&amount=${decimalToBase(
+        inAmount,
+        8,
+      )}&exact_out=false`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
 
-  if (data.error) {
-    throw new Error(data.error);
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+    const data: FetchQuoteResponse = await response.json();
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    return data.result;
+  } catch (err) {
+    throw new Error(
+      err instanceof Error ? err.message : 'Error Fetching Quote',
+    );
   }
-
-  return data.result;
 }
+
+export async function fetchUserOrders(address: string): Promise<MatchedOrder[]> {
+  if (!address) {
+    throw new Error('Address is required to fetch user orders.');
+  }
+  try {
+    const response = await fetch(
+      `${API().orderbook}/orders/user/matched/${address}?per_page=6&pending=false`,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(`Network response was not ok: ${response.statusText}`);
+    }
+
+    const data: FetchOrdersResponse = await response.json();
+    return data.result.data;
+  } catch (error) {
+    throw new Error(
+      error instanceof Error ? error.message : 'Error Fetching User Orders',
+    );
+  }
+}
+
 
 /**
  * Initiates the redeem process for the order
@@ -67,10 +116,10 @@ export const initiateRedeem = async (orderId: string, orderSecret: string) => {
     }
     const redeemResponse: RedeemResponse = await response.json();
     if (redeemResponse.status === 'Error') {
-      throw new Error(redeemResponse.error || 'Failed to redeem');
+      throw new Error(redeemResponse.error);
     }
   } catch (error) {
-    console.error('Failed to redeem:', error);
+    throw new Error(error instanceof Error ? error.message : 'Error redeeming swap');
   }
 };
 
@@ -87,7 +136,7 @@ export const fetchBlockNumbers = async () => {
     const data: BlockNumberResponse = await response.json();
     return data;
   } catch (error) {
-    console.error('Failed to fetch block numbers:', error);
+    throw new Error(error instanceof Error ? error.message : "Error fetching block numbers")
   }
 };
 
@@ -103,11 +152,13 @@ export const fetchOrder = async (orderId: string) => {
 
     const data: FetchOrderResponse = await response.json();
 
-    if (data.status === 'Ok') {
-      return data.result;
+    if(data.error){
+      throw new Error(data.error);
     }
+    return data.result;
   } catch (error) {
     console.error('Failed to fetch order details:', error);
+    throw new Error(error instanceof Error ? error.message : "Failed to fetch order data")
   }
 };
 
@@ -133,8 +184,7 @@ async function fetchUserOrderCount(address: string): Promise<number> {
     const data = (await response.json()) as OrderCountResponse;
     return data.result;
   } catch (error) {
-    console.error('Error fetching user order count:', error);
-    return 0;
+    throw new Error(error instanceof Error ? error.message : 'Error fetching user order count');
   }
 }
 
@@ -166,23 +216,31 @@ const computeSecretHash = async (nonce: number, address: string) => {
   };
 };
 
+/**
+ * Creates an order for a swap transaction.
+ *
+ * @param {number} params.inAmount - The input amount for the swap.
+ * @param {Quote} params.quote - The quote details for the swap.
+ * @returns {Promise<CreateOrderRes>} - A promise that resolves to the created order response.
+ * @throws {Error} - Throws an error if there is an issue creating the order or fetching the attested quote.
+ */
 export async function createOrder({
   inAmount,
   quote,
-  refundAddress,
 }: CreateOrderParams): Promise<CreateOrderRes> {
+  const bitcoinWallet = await BitcoinWallet.getInstance();
+  const evmWallet = await EVMWallet.getInstance();
+  const walletAddress = evmWallet.getWalletAddress();
   try {
     const [strategy, quoteAmount] = Object.entries(quote.quotes)[0]!;
 
-    const orderCount = await fetchUserOrderCount(userAddress);
-
-    console.log('User Order Count : ', orderCount);
+    const orderCount = await fetchUserOrderCount(walletAddress);
 
     const { secret, secretHash } = await computeSecretHash(
       orderCount + 1,
-      userAddress,
+      walletAddress,
     );
-
+    const pubKey = xOnlyPubkey(bitcoinWallet.getPublicKey()).toString('hex');
     const inAmountBase = decimalToBase(inAmount, 8);
 
     const order = {
@@ -192,8 +250,8 @@ export async function createOrder({
       destination_asset: ASSETS.toAsset,
       source_amount: inAmountBase.toString(),
       destination_amount: quoteAmount.toString(),
-      initiator_source_address: initiatorSourceAddress,
-      initiator_destination_address: userAddress,
+      initiator_source_address: pubKey,
+      initiator_destination_address: walletAddress,
       secret_hash: secretHash,
       fee: '1',
       timelock: 288,
@@ -205,7 +263,7 @@ export async function createOrder({
       ...order,
       additional_data: {
         strategy_id: strategy,
-        bitcoin_optional_recipient: refundAddress,
+        bitcoin_optional_recipient: bitcoinWallet.getWalletAddress(),
       },
     };
 
@@ -241,15 +299,15 @@ export async function createOrder({
       },
     ).then((res) => res.json());
 
-    console.log('createOrder Response : ', createOrderRes);
-    if (!createOrderRes || createOrderRes.status === 'Error') {
-      throw new Error('Error creating swap order');
+    if (createOrderRes.status === 'Error') {
+      throw new Error(createOrderRes.error);
     }
-    const orderId = createOrderRes.result;
-    let res: CreateOrderRes = { orderId, secret };
-    return res;
+
+    return {
+      orderId : createOrderRes.result,
+      secret,
+    };
   } catch (error) {
-    console.error('Error in createOrderFlow:', error);
-    throw error;
+    throw new Error(error instanceof Error ? error.message : 'Error intiating swap');
   }
 }

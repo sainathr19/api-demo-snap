@@ -27,12 +27,16 @@
     "test": "jest"
   },
   "dependencies": {
+    "@bitcoin-js/tiny-secp256k1-asmjs": "^2.2.3",
     "@metamask/snaps-sdk": "^6.10.0",
+    "@types/secp256k1": "^4.0.6",
+    "bip32": "2.0.1",
+    "bitcoinjs-lib": "^6.1.7",
+    "ecpair": "^3.0.0-rc.0",
     "ethers": "^6.13.4",
-    "jwt-decode": "^4.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "siwe": "^2.3.2"
+    "tiny-secp256k1": "2.2.0"
   },
   "devDependencies": {
     "@jest/globals": "^29.5.0",
@@ -69,5 +73,12 @@
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "@metamask/snaps-cli>@swc/core": false,
+      "bip32>tiny-secp256k1": false,
+      "bitcoinjs-lib>tiny-secp256k1": false
+    }
   }
 }

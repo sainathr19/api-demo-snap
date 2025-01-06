@@ -48,17 +48,29 @@ export const parseStatus = (
   blockNumbers: BlockNumberResponse,
 ) => {
   const { source_swap, destination_swap } = order;
-  const sourceBlockNumber = blockNumbers[source_swap.chain];
-  const destinationBlockNumber = blockNumbers[destination_swap.chain];
-  if (!sourceBlockNumber || !destinationBlockNumber) return;
+  const sourceBlockNumber = blockNumbers[source_swap.chain]!;
+  const destinationBlockNumber = blockNumbers[destination_swap.chain]!;
 
   return ParseOrderStatus(order, sourceBlockNumber, destinationBlockNumber);
 };
 
 export function truncate(str: string, length: number): string {
-  return str.length > length
-    ? `${str.slice(0, 5)}...${str.slice(str.length - 5, str.length)}`
+  return str.length > length * 2
+    ? `${str.slice(0, length)}...${str.slice(str.length - length, str.length)}`
     : str;
+}
+
+export function getFormattedDate(CreatedAt: string): string {
+  const date = new Date(CreatedAt);
+
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+
+  return `${day} ${month} ${year} | ${hours} : ${minutes}`;
 }
 
 export const ParseOrderStatus = (
@@ -163,7 +175,7 @@ export const isExpired = (unixTime: number, tillHours = 0): boolean => {
 export enum StatusLabel {
   Created = 'Awaiting Match',
   Matched = 'Awaiting Deposit',
-  InitiateDetected = 'Deposit Detected',
+  InitiateDetected = 'Awaiting Confirmation',
   Initiated = 'Deposit Confirmed',
   CounterPartyInitiateDetected = 'Confirming Counter Party Deposit',
   CounterPartyInitiated = 'Ready to Redeem',

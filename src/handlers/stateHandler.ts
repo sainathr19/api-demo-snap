@@ -1,4 +1,4 @@
-import { OrderState } from '../lib/types';
+import { BitcoinWalletState, DataStore, OrderState } from '../lib/types';
 
 class StateManager {
   private static instance: StateManager;
@@ -12,24 +12,28 @@ class StateManager {
     return StateManager.instance;
   }
 
-  async getState(): Promise<OrderState | null> {
+  async getState(): Promise<DataStore | null> {
     return (await snap.request({
       method: 'snap_manageState',
       params: { operation: 'get' },
-    })) as OrderState;
+    })) as DataStore;
   }
+  async setOrderState(state: OrderState): Promise<void> {
 
-  async setState(state: Partial<OrderState>): Promise<void> {
+    const currentState = await this.getState();
     await snap.request({
       method: 'snap_manageState',
       params: {
         operation: 'update',
-        newState: state,
+        newState: {
+          bitcoinWallet: currentState?.bitcoinWallet || null,
+          pendingOrder: state,
+        },
       },
     });
   }
 
-  async updateState(interfaceId: string): Promise<void> {
+  async setBitcoinWallet(state: BitcoinWalletState): Promise<void> {
     const currentState = await this.getState();
     await snap.request({
       method: 'snap_manageState',
@@ -37,18 +41,56 @@ class StateManager {
         operation: 'update',
         newState: {
           ...currentState,
-          interfaceId,
+          bitcoinWallet: state,
         },
       },
     });
   }
 
-  async clearState(): Promise<void> {
+  async updateOrderInterfaceId(interfaceId: string): Promise<void> {
+    const currentState = await this.getState();
+    const pendingOrder = currentState?.pendingOrder;
     await snap.request({
       method: 'snap_manageState',
-      params: { operation: 'clear' },
+      params: {
+        operation: 'update',
+        newState: {
+          ...currentState,
+          pendingOrder: {
+            ...pendingOrder,
+            interfaceId,
+          },
+        },
+      },
     });
   }
+
+  async clearPendingOrder(): Promise<void> {
+    const currentState = await this.getState();
+  
+    if (!currentState || !currentState.bitcoinWallet) {
+      await snap.request({
+        method: 'snap_manageState',
+        params: {
+          operation: 'clear',
+        },
+      });
+      return;
+    }
+
+    const bitcoinWallet = currentState.bitcoinWallet;
+    await snap.request({
+      method: 'snap_manageState',
+      params: {
+        operation: 'update',
+        newState: {
+          bitcoinWallet,
+          pendingOrder: null,
+        },
+      },
+    });
+  }
+  
 }
 
 export default StateManager;

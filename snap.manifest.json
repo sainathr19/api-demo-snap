@@ -7,10 +7,11 @@
     "url": "https://github.com/MetaMask/template-snap-monorepo.git"
   },
   "source": {
-    "shasum": "MzUNJ4r6a7vkQeIo2cH/Uve3LZ+NnI5hsq4ke5DB+28=",
+    "shasum": "CzYcRiAwnr7frp66zEG4QZ82AQfOzugIw+FdfiXs2LM=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
+        "iconPath": "src/assets/garden_logo.svg",
         "packageName": "snap",
         "registry": "https://registry.npmjs.org/"
       }
@@ -22,10 +23,18 @@
       "dapps": true,
       "snaps": false
     },
+    "snap_notify": {},
     "endowment:network-access": {},
     "endowment:page-home": {},
     "endowment:ethereum-provider": {},
     "snap_manageState": {},
+    "snap_getBip32Entropy": [
+      {
+        "path": ["m", "44'", "1'", "0'", "0", "0"],
+        "curve": "secp256k1"
+      }
+    ],
+    "endowment:lifecycle-hooks": {},
     "endowment:cronjob": {
       "jobs": [
         {

@@ -1,5 +1,6 @@
 import {
   OnCronjobHandler,
+  OnInstallHandler,
   OnUserInputHandler,
   UserInputEventType,
   type OnHomePageHandler,
@@ -8,23 +9,27 @@ import {
 import {
   OrderState,
   OrderStatus,
-  type Quote,
   type SwapFormErrors,
   type SwapFormState,
 } from './lib/types';
 import {
-  createOrder,
   fetchBlockNumbers,
   fetchOrder,
-  fetchQuote,
   initiateRedeem,
 } from './handlers/swapHandler';
 import SwapProgress from './components/SwapProgress';
-import HomePage from './components/HomePage';
-import { parseStatus } from './lib/utils';
+import { baseToDecimal, parseStatus } from './lib/utils';
 import StateManager from './handlers/stateHandler';
 import UIManager from './handlers/uiHandler';
 import SwapSuccess from './components/SwapSuccess';
+import {
+  HandleHistoryClick,
+  HandleInAmountChange,
+  HandleInitiateSwap,
+} from './handlers/inputHandler';
+import { BitcoinWallet } from './wallets/bitcoin';
+import HomePage from './components/HomePage';
+import { EVMWallet } from './wallets/evm';
 
 const stateManager = StateManager.getInstance();
 const uiManager = UIManager.getInstance();
@@ -43,20 +48,18 @@ export const onRpcRequest: OnRpcRequestHandler = async ({
 };
 
 export const onHomePage: OnHomePageHandler = async () => {
-  const state = await stateManager.getState();
-  console.log(state);
+  let state = await stateManager.getState();
+  let interfaceId;
+
   // If no pending orders, show the home page
-  if (!state || !state.orderId) {
-    console.info('No pending orders Found');
-    const interfaceId = await uiManager.createHomePage();
-    return { id: interfaceId };
+  if (!state?.pendingOrder) {
+    interfaceId = await uiManager.createHomePage();
+  } else {
+    // If there is a pending order, show the order progress
+    const { orderId } = state.pendingOrder;
+    interfaceId = await uiManager.createProgressPage(orderId);
+    await stateManager.updateOrderInterfaceId(interfaceId);
   }
-
-  // If there is a pending order, show the order progress
-
-  const orderId = state.orderId as string;
-  const interfaceId = await uiManager.createProgressPage(orderId);
-  await stateManager.setState({ interfaceId });
 
   return { id: interfaceId };
 };
@@ -65,16 +68,25 @@ export const onCronjob: OnCronjobHandler = async ({ request }) => {
   switch (request.method) {
     case 'checkOrderStatus':
       const state = await stateManager.getState();
-
-      if (!state?.orderId) {
+      
+      console.log(state?.pendingOrder);
+      if (!state?.pendingOrder) {
         console.log('No pending orders Found');
         return;
       }
-      await uiManager.updateProgressPage(state.orderId, state.interfaceId);
+      await UpdateOrderProgress(state.pendingOrder);
 
     default:
       throw new Error('Method not found.');
   }
+};
+
+export const onInstall: OnInstallHandler = async () => {
+  // Request Permission to Ethereum Accounts
+  await ethereum.request({
+    "method": "eth_requestAccounts",
+    "params": [],
+   });
 };
 
 export const onUserInput: OnUserInputHandler = async ({
@@ -82,156 +94,98 @@ export const onUserInput: OnUserInputHandler = async ({
   id,
   context,
 }) => {
+  const bitcoinWallet = await BitcoinWallet.getInstance();
+  const btcAddress = bitcoinWallet.getWalletAddress();
+  const btcBalance = await bitcoinWallet.getBalance();
   switch (event.type) {
-    case UserInputEventType.InputChangeEvent:
-      switch (event.name) {
-        case 'in_amount': {
-          const inAmount = event.value as string;
-          if (inAmount) {
-            try {
-              const quote: Quote = await fetchQuote(inAmount);
-              await snap.request({
-                method: 'snap_updateInterface',
-                params: {
-                  id,
-                  ui: <HomePage quote={quote} inAmount={inAmount} />,
-                  context: {
-                    quote: quote,
-                  },
-                },
-              });
-            } catch (error) {
-              console.error('Error fetching quote:', error);
-            }
-          } else {
-            await snap.request({
-              method: 'snap_updateInterface',
-              params: {
-                id,
-                ui: <HomePage />,
-              },
-            });
-          }
+    case UserInputEventType.InputChangeEvent: {
+      const inputName = event.name;
+      switch (inputName) {
+        case 'in_amount':
+          const input = event.value as string;
+          await HandleInAmountChange(context, id, input);
           break;
-        }
+
         default:
+          console.warn(`Unhandled input change event: ${inputName}`);
           break;
       }
-    case UserInputEventType.ButtonClickEvent:
-      switch (event.name) {
+      break;
+    }
+    case UserInputEventType.ButtonClickEvent: {
+      const buttonName = event.name;
+      switch (buttonName) {
         case 'initiate_swap':
-          const state = await snap.request({
-            method: 'snap_getInterfaceState',
-            params: { id },
+          await HandleInitiateSwap(context, id);
+          break;
+
+        case 'history':
+          await HandleHistoryClick(id);
+          break;
+
+        case 'back': {
+          await snap.request({
+            method: 'snap_updateInterface',
+            params: {
+              id,
+              ui: <HomePage btcAddress={btcAddress} btcBalance={btcBalance} />,
+            },
           });
-
-          const swapForm = state['swap_form']! as SwapFormState;
-          const errors = validateInputs(swapForm);
-          const quote: Quote =
-            (context?.quote as Quote) || (await fetchQuote(swapForm.in_amount));
-
-          if (errors.inAmount || errors.refundAddress) {
-            await snap.request({
-              method: 'snap_updateInterface',
-              params: {
-                id,
-                ui: (
-                  <HomePage
-                    errors={errors}
-                    inAmount={swapForm.in_amount}
-                    refundAddress={swapForm.refund_address}
-                    quote={quote}
-                  />
-                ),
-              },
-            });
-            break;
-          }
-
-          try {
-            let { orderId, secret } = await createOrder({
-              inAmount: swapForm.in_amount,
-              quote,
-              refundAddress: swapForm.refund_address,
-            });
-
-            const newState: OrderState = {
-              orderId,
-              orderSecret: secret,
-              interfaceId: id,
-            };
-            await stateManager.setState(newState);
-
-            const blockNumbers = (await fetchBlockNumbers()) as Record<
-              string,
-              number
-            >;
-            const order = await fetchOrder(orderId);
-
-            const status = parseStatus(order!, blockNumbers);
-            const userCanRedeem = status == OrderStatus.CounterPartyInitiated;
-
-            await snap.request({
-              method: 'snap_updateInterface',
-              params: {
-                id,
-                ui: (
-                  <SwapProgress
-                    order={order!}
-                    blockNumbers={blockNumbers!}
-                    userCanRedeem={userCanRedeem}
-                  />
-                ),
-              },
-            });
-            break;
-          } catch (err: any) {
-            errors.createError = err as string;
-            await snap.request({
-              method: 'snap_updateInterface',
-              params: {
-                id,
-                ui: (
-                  <HomePage
-                    errors={errors}
-                    inAmount={swapForm.in_amount}
-                    refundAddress={swapForm.refund_address}
-                    quote={quote}
-                  />
-                ),
-              },
-            });
-          }
-        case 'redeem':
-          const orderState = await stateManager.getState();
-
-          if (!orderState) return;
-
-          const { orderId, orderSecret } = orderState;
-
-          try {
-            await initiateRedeem(orderId, orderSecret);
-            await stateManager.clearState();
-
-            await snap.request({
-              method: 'snap_updateInterface',
-              params: {
-                id,
-                ui: <SwapSuccess />,
-              },
-            });
-          } catch (err) {
-            console.error('Error Redeeming:', err);
-          }
+        }
+        case 'copy_address':
+          await navigator.clipboard.writeText(btcAddress);
+        default:
+          console.warn(`Unhandled button click event: ${buttonName}`);
           break;
       }
+      break;
+    }
+    default: {
+      console.warn(`Unhandled event type: ${event.type}`);
+      break;
+    }
   }
 };
 
-export function validateInputs(formState: SwapFormState): SwapFormErrors {
+export const UpdateOrderProgress = async (pendingOrder: OrderState) => {
+  const { orderId, orderSecret, interfaceId } = pendingOrder;
+  const blockNumbers = (await fetchBlockNumbers()) as Record<string, number>;
+  const order = await fetchOrder(orderId);
+
+  const status = parseStatus(order, blockNumbers);
+
+  if (status === OrderStatus.CounterPartyInitiated) {
+    await initiateRedeem(orderId, orderSecret);
+    await stateManager.clearPendingOrder();
+    await snap.request({
+      method: 'snap_notify',
+      params: {
+        type: 'native',
+        message: 'Swap Successfull',
+      },
+    });
+    await snap.request({
+      method: 'snap_notify',
+      params: {
+        type: 'inApp',
+        message: 'Swap Successfull',
+      },
+    });
+    await uiManager.updateInterface(interfaceId, <SwapSuccess />);
+    return;
+  }
+  await uiManager.updateInterface(
+    interfaceId,
+    <SwapProgress order={order} blockNumbers={blockNumbers} />,
+  );
+};
+
+export function validateInputs(
+  formState: SwapFormState,
+  btcBalance: string,
+): SwapFormErrors {
   let errors: SwapFormErrors = {};
 
-  // Validate input amount
   if (!formState.in_amount) {
     errors.inAmount = 'Amount is required';
   } else {
@@ -241,16 +195,11 @@ export function validateInputs(formState: SwapFormState): SwapFormErrors {
         (errors.inAmount ? errors.inAmount + '. ' : '') +
         'Amount should be in the range of 0.01 - 5.';
     }
+    if (inAmount > parseFloat(btcBalance)) {
+      errors.inAmount =
+        (errors.inAmount ? errors.inAmount + '. ' : '') +
+        'Insufficient balance';
+    }
   }
-
-  // Validate refund address
-  if (!formState.refund_address) {
-    errors.refundAddress = 'Recovery address is required';
-  } else if (!formState.refund_address.startsWith('tb')) {
-    errors.refundAddress =
-      (errors.refundAddress ? errors.refundAddress + '. ' : '') +
-      'Invalid Bitcoin Address';
-  }
-
   return errors;
 }

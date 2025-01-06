@@ -201,25 +201,34 @@ export type RedeemResponse = APIResponse & {
 
 export type SwapFormState = {
   in_amount: string;
-  refund_address: string;
 };
 
 export type OrderState = {
   orderId: string;
   orderSecret: string;
   interfaceId: string;
+  initiateTxHash: string;
+};
+
+export type BitcoinWalletState = {
+  privateKey: string;
+  publicKey: string;
+  address: string;
+};
+
+export type DataStore = {
+  pendingOrder: OrderState;
+  bitcoinWallet: BitcoinWalletState;
 };
 
 export type SwapFormErrors = {
   inAmount?: string;
-  refundAddress?: string;
   createError?: string;
 };
 
 export interface CreateOrderParams {
   inAmount: string;
   quote: Quote;
-  refundAddress: string;
 }
 
 export type CreateOrderRes = {

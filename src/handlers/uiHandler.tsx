@@ -1,19 +1,10 @@
-import {
-  BlockNumberResponse,
-  OrderStatus,
-  Quote,
-  SwapFormErrors,
-  SwapFormState,
-} from '../lib/types';
+import { BlockNumberResponse } from '../lib/types';
 import HomePage from '../components/HomePage';
 import SwapProgress from '../components/SwapProgress';
 import { fetchBlockNumbers, fetchOrder } from './swapHandler';
-import { parseStatus } from '../lib/utils';
-
+import { BitcoinWallet } from '../wallets/bitcoin';
 class UIManager {
   private static instance: UIManager;
-
-  private constructor() {}
 
   static getInstance(): UIManager {
     if (!UIManager.instance) {
@@ -23,69 +14,37 @@ class UIManager {
   }
 
   async createHomePage(): Promise<string> {
+    const bitcoinWallet = await BitcoinWallet.getInstance();
+    const btcAddress = bitcoinWallet.getWalletAddress();
+    const btcBalance = await bitcoinWallet.getBalance()
+
     return await snap.request({
       method: 'snap_createInterface',
       params: {
-        ui: <HomePage />,
+        ui: <HomePage btcAddress={btcAddress}  btcBalance={btcBalance}/>,
+        context: {
+          btcAddress,
+        },
       },
     })!;
   }
 
   async createProgressPage(orderId: string): Promise<string> {
-    const blockNumbers = (await fetchBlockNumbers()) as BlockNumberResponse;
+    const blockNumbers = await fetchBlockNumbers();
     const order = await fetchOrder(orderId);
-
-    const status = parseStatus(order!, blockNumbers);
-    const userCanRedeem = status == OrderStatus.CounterPartyInitiated;
 
     return await snap.request({
       method: 'snap_createInterface',
       params: {
-        ui: (
-          <SwapProgress
-            order={order!}
-            blockNumbers={blockNumbers}
-            userCanRedeem={userCanRedeem}
-          />
-        ),
+        ui: <SwapProgress order={order} blockNumbers={blockNumbers} />,
       },
     });
   }
 
-  async updateHomePage(
-    id: string,
-    quote?: Quote,
-    errors?: SwapFormErrors,
-    formState?: SwapFormState,
-  ): Promise<void> {
+  async updateInterface(id: string, ui: JSX.Element, context?: any) {
     await snap.request({
       method: 'snap_updateInterface',
-      params: {
-        id,
-        ui: <HomePage />,
-      },
-    })!;
-  }
-
-  async updateProgressPage(orderId: string, interfaceId: string) {
-    const blockNumbers = (await fetchBlockNumbers()) as Record<string, number>;
-    const order = await fetchOrder(orderId);
-
-    const status = parseStatus(order!, blockNumbers);
-    const userCanRedeem = status == OrderStatus.CounterPartyInitiated;
-
-    return await snap.request({
-      method: 'snap_updateInterface',
-      params: {
-        id: interfaceId,
-        ui: (
-          <SwapProgress
-            order={order!}
-            blockNumbers={blockNumbers!}
-            userCanRedeem={userCanRedeem}
-          />
-        ),
-      },
+      params: { id, ui, context },
     });
   }
 }
