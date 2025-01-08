@@ -1,4 +1,5 @@
-import { CRYPTO_CURVES, SLIP10Node } from "./types";
+import { CRYPTO_CURVE } from "./bitcoin/constants";
+import { SLIP10Node } from "./types";
 import { trimHexPrefix } from "./utils";
 import * as bip32 from 'bip32'; 
 import * as bitcoin from 'bitcoinjs-lib';
@@ -11,15 +12,13 @@ import * as bitcoin from 'bitcoinjs-lib';
  */
 export const getHDNode = async (
     pathArray: string[],
-    curve : CRYPTO_CURVES,
-    method : "snap_getBip32Entropy" | "snap_getBip44Entropy"
 ): Promise<bip32.BIP32Interface> => {
     // Request entropy from the Snap
     const slip10Node = await snap.request({
-        method,
+        method : "snap_getBip32Entropy",
         params: {
             path: pathArray,
-            curve: curve,
+            curve: CRYPTO_CURVE,
         },
     }) as SLIP10Node;
 

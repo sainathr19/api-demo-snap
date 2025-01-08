@@ -1,22 +1,21 @@
-import { BitcoinWalletState, DataStore, OrderState } from '../lib/types';
+import { PersistedData } from '../interface';
+import { BitcoinWalletState, OrderState } from '../interface';
 
-class StateManager {
-  private static instance: StateManager;
+class DataStore {
+  private static instance: DataStore;
 
-  private constructor() {}
-
-  static getInstance(): StateManager {
-    if (!StateManager.instance) {
-      StateManager.instance = new StateManager();
+  static getInstance(): DataStore {
+    if (!DataStore.instance) {
+      DataStore.instance = new DataStore();
     }
-    return StateManager.instance;
+    return DataStore.instance;
   }
 
-  async getState(): Promise<DataStore | null> {
+  async getState(): Promise<PersistedData | null> {
     return (await snap.request({
       method: 'snap_manageState',
       params: { operation: 'get' },
-    })) as DataStore;
+    })) as PersistedData;
   }
   async setOrderState(state: OrderState): Promise<void> {
 
@@ -93,4 +92,4 @@ class StateManager {
   
 }
 
-export default StateManager;
+export default DataStore;

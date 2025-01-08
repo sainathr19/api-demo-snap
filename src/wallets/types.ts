@@ -1,4 +1,3 @@
-import { MatchedOrder } from "../lib/types";
 
 export interface SLIP10Node {
     /**
@@ -42,105 +41,6 @@ export interface SLIP10Node {
      */
     readonly curve: 'ed25519' | 'secp256k1';
   }
-  
-  export interface GetPublicExtendedKeyRequest {
-    method: 'btc_getPublicExtendedKey';
-    params: {
-      network: BitcoinNetwork;
-      scriptType: ScriptType;
-    };
-  }
-  
-  export interface GetAllXpubsRequest {
-    method: 'btc_getAllXpubs';
-    params: Record<string, never>
-  }
-  
-  export interface SignPsbt {
-    method: 'btc_signPsbt';
-    params: {
-      psbt: string;
-      network: BitcoinNetwork;
-      scriptType: ScriptType;
-    };
-  }
-
-  export enum KeyOptions {
-    Password = 'password',
-    Credential = 'credential',
-    PubKey = 'pubkey',
-  }
-  
-  export interface GetMasterFingerprint {
-    method: 'btc_getMasterFingerprint';
-  }
-  
-  export interface ManageNetwork {
-    method: 'btc_network';
-    params: {
-      action: 'get' | 'set';
-      network?: BitcoinNetwork;
-    };
-  }
-  
-  export interface SaveLNDataToSnap {
-    method: 'btc_saveLNDataToSnap';
-    params: {
-      walletId: string;
-      credential: string;
-      password: string;
-    };
-  }
-  
-  export interface GetLNDataFromSnap {
-    method: 'btc_getLNDataFromSnap';
-    params: {
-      key: KeyOptions;
-      walletId?: string;
-      type?: 'get' | 'refresh'
-    };
-  }
-  
-  export interface SignLNInvoice {
-    method: 'btc_signLNInvoice';
-    params: {
-      invoice: string;
-    };
-  }
-  
-  export interface SignMessage {
-    method: 'btc_signMessage';
-    params: {
-      message: string;
-      protocol: 'ecdsa' | 'bip322'
-      derivationPath?: string;
-    };
-  }
-  
-  export type MetamaskBTCRpcRequest =
-    | GetAllXpubsRequest
-    | GetPublicExtendedKeyRequest
-    | SignPsbt
-    | GetMasterFingerprint
-    | ManageNetwork
-    | SaveLNDataToSnap
-    | GetLNDataFromSnap
-    | SignLNInvoice
-    | SignMessage;
-  
-
-  export type BTCMethodCallback = (
-    originString: string,
-    requestObject: MetamaskBTCRpcRequest,
-  ) => Promise<unknown>;
-
-  export interface Snap {
-    registerRpcMessageHandler: (fn: BTCMethodCallback) => unknown;
-    request<T>(options: {
-      method: string;
-      params?: unknown[] | Record<string, any>;
-    }): Promise<T>;
-  }
 
   export enum ScriptType {
     P2PKH = 'P2PKH',
@@ -154,14 +54,3 @@ export interface SLIP10Node {
   }
 
   export type CRYPTO_CURVES = "secp256k1" | "ed25519" | "ed25519Bip32"
-
-  export interface FetchOrdersResponse {
-    status: "Ok" | "Error";
-    result: {
-      data: MatchedOrder[];
-      total_pages: number;
-      total_items: number;
-      per_page: number;
-      page: number;
-    };
-  }

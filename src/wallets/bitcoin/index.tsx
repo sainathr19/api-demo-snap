@@ -2,9 +2,8 @@ import * as bitcoin from 'bitcoinjs-lib';
 import ECPairFactory from 'ecpair';
 import * as ecc from '@bitcoin-js/tiny-secp256k1-asmjs';
 import * as secp256k1 from 'secp256k1';
-import { getHDNode } from '../getHDNode';
-import { CRYPTO_CURVE, PATH } from './constants';
-import StateManager from '../../handlers/stateHandler';
+import { RpcResponse } from '../../interface';
+import DataStore from '../../utils/dataStore';
 
 bitcoin.initEccLib(ecc);
 const ECPair = ECPairFactory(ecc);
@@ -14,6 +13,7 @@ export class BitcoinWallet {
   private privateKey: string;
   private publicKey: string;
   private address: string;
+
 
   private constructor(privateKey: string, publicKey: string, address: string) {
     this.privateKey = privateKey;
@@ -26,63 +26,29 @@ export class BitcoinWallet {
    * @returns BitcoinWallet instance.
    */
   public static async getInstance(): Promise<BitcoinWallet> {
-    const stateManager = StateManager.getInstance();
+    
+    const dataStore = DataStore.getInstance();
     if (!BitcoinWallet.instance) {
-      const state = await stateManager.getState();
+      const state = await dataStore.getState();
 
-      console.log(state?.bitcoinWallet);
-      const { privateKey, publicKey, address } =
-        state?.bitcoinWallet || (await BitcoinWallet.deriveWalletTestnet4());
-      await stateManager.setBitcoinWallet({ privateKey, publicKey, address });
-      BitcoinWallet.instance = new BitcoinWallet(
-        privateKey,
-        publicKey,
-        address,
-      );
+      if(!state?.bitcoinWallet){
+        throw new Error("Bitcoin Wallet not Initialized");
+      }
+      const { privateKey, publicKey, address } = state.bitcoinWallet;
+
+      BitcoinWallet.instance = new BitcoinWallet(privateKey,publicKey,address);
     }
     return BitcoinWallet.instance;
   }
 
-  /**
-   * Derive wallet keys and address for Bitcoin Testnet4
-   * @returns Object containing private key, public key, and wallet address
-   */
-  private static deriveWalletTestnet4 = async (): Promise<{
-    privateKey: string;
-    publicKey: string;
-    address: string;
-  }> => {
-    const node = await getHDNode(PATH,CRYPTO_CURVE,"snap_getBip32Entropy");
-
-    // Extract private key from HDNode
-    const privateKey = node.privateKey?.toString('hex');
-    if (!privateKey) {
-      throw new Error('Failed to extract private key from HDNode');
+  public static isInitialized = async () : Promise<RpcResponse> => {
+    const dataStore = DataStore.getInstance();
+    const state = await dataStore.getState();
+    return {
+      status : "Ok",
+      result : !!state?.bitcoinWallet
     }
-
-    // Create ECPair from private key
-    const network = bitcoin.networks.testnet;
-    const keyPair = ECPair.fromPrivateKey(Buffer.from(privateKey, 'hex'), {
-      network,
-    });
-
-    // Extract public key as a hexadecimal string
-    const publicKey = Buffer.from(keyPair.publicKey).toString('hex');
-
-    // Generate SegWit address
-    const { address } = bitcoin.payments.p2wpkh({
-      pubkey: Buffer.from(keyPair.publicKey),
-      network,
-    });
-
-    // Ensure all components are valid
-    if (!publicKey || !address) {
-      throw new Error('Failed to derive public key or address');
-    }
-
-    return { privateKey, publicKey, address };
-  };
-
+  }
   /**
    * Get the wallet's address.
    * @returns Wallet address.
@@ -154,8 +120,7 @@ export class BitcoinWallet {
    * @returns Transaction ID
    */
   public async send(amount: number, toAddress: string): Promise<string> {
-
-    console.log('send: Start');
+    
     if (!this.privateKey || !this.address) {
       throw new Error('Wallet not initialized');
     }
@@ -190,6 +155,7 @@ export class BitcoinWallet {
       if (inputAmount >= amount + 1000) break; // Add fee estimate
     }
 
+    // TODO : Dynamic Fee estimation 
     if (inputAmount < amount + 1000) {
       throw new Error('Insufficient funds');
     }
@@ -226,7 +192,6 @@ export class BitcoinWallet {
     const tx = psbt.extractTransaction();
     const txHex = tx.toHex();
     const txId = await this.broadcastTransaction(txHex);
-    console.log('send: Transaction broadcasted', txId);
     return txId;
   }
 }

@@ -1,3 +1,86 @@
+export interface GetWalletStatus {
+  method: 'get_walletStatus';
+  id: string | number | null;
+  jsonrpc: '2.0';
+}
+
+export interface InitializeBitcoinWallet {
+  method: 'initialize_btcWallet';
+  id: string | number | null;
+  jsonrpc: '2.0';
+}
+
+export interface GardencreateOrder {
+  method: 'garden_createOrder';
+  params: {
+    evmAddress: string;
+    inAmount: string;
+    quote: Quote;
+  };
+  id: string | number | null;
+  jsonrpc: '2.0';
+}
+
+export type GardenSwapRpcRequest =
+  | GardencreateOrder
+  | InitializeBitcoinWallet
+  | GetWalletStatus;
+
+export type BTCMethodCallback = (
+  originString: string,
+  requestObject: GardenSwapRpcRequest,
+) => Promise<unknown>;
+
+export type RpcResponse = {
+  status: 'Ok' | 'Error';
+  result?: any;
+  error?: string;
+};
+
+
+export const RpcResponseOk = (result: any): RpcResponse => {
+  return {
+    status: 'Ok',
+    result,
+  };
+};
+
+export const RpcResponseError = (error: string): RpcResponse => {
+  return {
+    status: 'Error',
+    error,
+  };
+};
+
+export enum ScriptType {
+  P2PKH = 'P2PKH',
+  P2SH_P2WPKH = 'P2SH-P2WPKH',
+  P2WPKH = 'P2WPKH',
+}
+
+export enum BitcoinNetwork {
+  Main = 'main',
+  Test = 'test',
+}
+
+export type OrderState = {
+  orderId: string;
+  orderSecret: string;
+  interfaceId?: string;
+  initiateTxHash?: string;
+};
+
+export type BitcoinWalletState = {
+  privateKey: string;
+  publicKey: string;
+  address: string;
+};
+
+export type PersistedData = {
+  pendingOrder: OrderState;
+  bitcoinWallet: BitcoinWalletState;
+};
+
 export type ApiResponse = {
   status: 'Ok' | 'Error';
   error?: string;
@@ -203,19 +286,6 @@ export type SwapFormState = {
   in_amount: string;
 };
 
-export type OrderState = {
-  orderId: string;
-  orderSecret: string;
-  interfaceId: string;
-  initiateTxHash: string;
-};
-
-export type BitcoinWalletState = {
-  privateKey: string;
-  publicKey: string;
-  address: string;
-};
-
 export type DataStore = {
   pendingOrder: OrderState;
   bitcoinWallet: BitcoinWalletState;
@@ -229,6 +299,7 @@ export type SwapFormErrors = {
 export interface CreateOrderParams {
   inAmount: string;
   quote: Quote;
+  evmAddress: string;
 }
 
 export type CreateOrderRes = {
